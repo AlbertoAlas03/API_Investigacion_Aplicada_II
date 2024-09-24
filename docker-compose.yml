@@ -1,0 +1,14 @@
+version: '3'
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3001"
+    environment:
+      - MONGO_URI=${Mongo_uri}
+      - SECRET_KEY=${SECRET_KEY}
+      - Email_User=${Email_User}
+      - Email_Pass=${Email_Pass}
+    volumes:
+      - .:/app
+    command: npm start

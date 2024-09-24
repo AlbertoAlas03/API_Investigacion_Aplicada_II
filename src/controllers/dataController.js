@@ -1,0 +1,381 @@
+const DataUsers = require('../models/userSchema');
+const DataSchedules = require('../models/scheduleSchema');
+const DataActivity = require('../models/activitySchema');
+const TokenSchema = require('../models/tokensSchema');
+const { generateToken } = require('./jwtUtils');
+const nodemailer = require('nodemailer');  
+const { v4: uuidv4 } = require('uuid');  
+
+//Controladores para usuarios
+
+//buscar todos los usuarios
+exports.listusers = async (req, res, next) => {
+    try {
+        const data = await DataUsers.find({});
+        res.json(data);
+    } catch (error) {
+        console.log(error);
+        res.status(200).send(error);
+        next();
+    }
+};
+
+//añadir usuario
+exports.adduser = async (req, res) => {
+    const { name, email, password } = req.body;
+     // Generar un código de verificación
+     const verificationCode = uuidv4();
+    const data = new DataUsers({
+        name: name || 0,
+        email: email || 0,
+        password: password || 0,
+        code: verificationCode
+    });
+    try {
+       
+        const correoexistente = await DataUsers.findOne({ email })|| null;
+
+        if (correoexistente !==null) {
+            return res.status(400).json({ message: "El correo ya esta en uso, prueba con uno diferente" });
+        }
+       
+        //configuración del correo
+        const transporter = nodemailer.createTransport({
+            service: 'Gmail',  
+            auth: {
+                user:process.env.Email_User,
+                pass:process.env.Email_Pass         
+            }
+        });
+        // datos del correo a enviar
+        const mailOptions = {
+            from:process.env.Email_User,
+            to: email,
+            subject: 'Verificación de la cuenta para usar asistente personal',
+            text: `Debes  verificar tu cuenta con el siguiente código: ${verificationCode}`
+          
+        };
+
+        // Enviar el correo de verificación
+        transporter.sendMail(mailOptions, (error, info) => {
+            if (error) {
+                console.log(error);
+                return res.status(500).json({ message: "Error no se pudo enviar el correo de verificación vuelve a intentar"});
+            } else {
+                console.log('Correo enviado: ' + info.response);
+                data.save();
+                return res.status(200).json({ message: "Usuario creado. Revisa tu correo para verificar la cuenta." });
+            }
+
+        });
+       
+    } catch (error) {
+        res.status(500).json({ message: "Error al crear el usuario"/*, error: error.message*/ });
+       // res.send(error);
+        //next(error);
+    }
+}
+exports.verifyuser = async (req, res, next) => {
+    const { email, code } = req.body;
+
+    try {
+        const user = await DataUsers.findOne({ email: email })|| null;
+
+        if (user === null) {
+            return res.status(400).json({ message: "No se encontró el correo, prueba registrándote primero" });
+        }
+
+        if (user.status === "Verificado") {
+            return res.status(400).json({ message: "El correo ya esta verificado" });
+        }
+
+        if (user.code === code) {
+            user.status = "Verificado";
+            await user.save();
+            return res.status(200).json({ message: "Verificación exitosa" });
+        } else {
+            return res.status(400).json({ message: "Código de verificación incorrecto" });
+        }
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({ message: "Error al verificar el usuario" });
+    }
+};
+
+
+//actualizar usuario
+exports.updateuser = async (req, res, next) => {
+    try {
+        const data = await DataUsers.findOneAndUpdate(
+            { _id: req.params.id },
+            req.body,
+            {
+                new: true,
+                runValidators: true,
+                context: 'query'
+            }
+        );
+        if (!data) {
+            return res.status(400).json({ message: "user not found" })
+        }
+        res.json({ message: "user updated", data: data });
+
+    } catch (error) {
+        console.log(error);
+        res.status(400).json({ message: "Error" });
+        next(error);
+    }
+
+};
+
+//eliminar usuario
+exports.deleteuser = async (req, res, next) => {
+    try {
+        const data = await DataUsers.findOneAndDelete(
+            { _id: req.params.id },
+            req.body,
+            {
+                new: true,
+                runValidators: true,
+                context: 'query'
+            }
+        );
+        if (!data) {
+            return res.status(400).json({ message: "user not found" })
+        }
+        res.json({ message: "user deleted", data: data });
+
+    } catch (error) {
+        console.log(error);
+        res.status(400).json({ message: "Error" });
+        next(error);
+    }
+
+};
+
+//Eliminar usuarios
+
+exports.deleteAllUsers = async (req, res, next) => {
+    try {
+        const data = await DataUsers.deleteMany({});
+        if (!data) {
+            return res.status(500).json({ message: "users not found" })
+        }
+        res.json({ message: "users deleted", data: data });
+
+    } catch (error) {
+        console.log(error);
+        res.status(400).json({ message: "Error" });
+        next(error);
+    }
+}
+
+
+//This is for the token blacklist checking when the user logs out, so then we'll invalidate the past current token.
+let blackListedTokens = [];
+
+exports.login = async (req, res) => {
+    const { email, password } = req.body;
+    const user = await DataUsers.findOne({ email:
+        email, password: password });
+    
+    const userStatus = 'Sin verificar';
+
+    if (user) {
+        // Check if the status is verified
+        if (user.status === userStatus) {
+            // Here is to deny the access to the user if the status is not verified, 
+            //so then we'll send a message to the user, and redirect the user to a new page in our frontend.
+            return res.status(400).json({ message: "El correo no ha sido verificado" });
+        }
+        const tokenPayload = { 
+            code: user.code, // Example of including user ID
+            idUser: user._id, // Catches the user ID generated by MongoDB
+            email: user.email // Include necessary information
+        };
+        const token = generateToken(tokenPayload);
+        const tokenStored = new TokenSchema({
+            token: token,
+            userId: user._id,
+        }); 
+        user.activity = true; //El estado es true porque acaba de ingresar a la aplicación.
+        await user.save();
+        await tokenStored.save(); //Guardamos el token en la base de datos
+        res.json({ success: true, message: "Usuario logeado", token: token });
+    } else {
+        res.status(400).json({ message: "Usuario no encontrado", success: false});
+    }
+};
+
+//controladores para horarios
+
+//buscar todos los horarios
+exports.listshedules = async (req, res) => {
+    try {
+        const data = await DataSchedules.find({UserId: req.params.id}); // Get schedules filtering by user id
+        res.json(data);
+    } catch (error) {
+        console.log(error);
+        res.status(200).send(error);
+        next();
+    }
+};
+
+//añadir horario
+exports.addschedule = async (req, res) => {
+    const { name, description, day, hour, idUser } = req.body;
+
+    const data = new DataSchedules({
+        name: name || 0,
+        description: description || 0,
+        day: day || 0,
+        hour: hour || 0,
+        idUser: idUser || 0
+    })
+
+    try {
+        await data.save();
+        res.json({ message: "Added new message", data: data });
+    } catch (error) {
+        console.log(error);
+        res.send(error);
+        next();
+    }
+}
+
+//actualizar horario
+exports.updateschedule = async (req, res, next) => {
+    try {
+        const data = await DataSchedules.findOneAndUpdate(
+            { _id: req.params.id },
+            req.body,
+            {
+                new: true,
+                runValidators: true,
+                context: 'query'
+            }
+        );
+        if (!data) {
+            return res.status(400).json({ message: "Horario no encontrado" })
+        }
+        res.json({ message: "Horario Actualizado", data: data });
+
+    } catch (error) {
+        console.log(error);
+        res.status(400).json({ message: "Error" });
+        next(error);
+    }
+
+};
+
+//eliminar horario
+exports.deleteschedule = async (req, res, next) => {
+    try {
+        const data = await DataSchedules.findOneAndDelete(
+            { _id: req.params.id },
+            req.body,
+            {
+                new: true,
+                runValidators: true,
+                context: 'query'
+            }
+        );
+        if (!data) {
+            return res.status(400).json({ message: "Horario no encontrado" })
+        }
+        res.json({ message: "Horario Eliminado", data: data });
+
+    } catch (error) {
+        console.log(error);
+        res.status(400).json({ message: "Error" });
+        next(error);
+    }
+
+};
+
+//CONTROLADORES PARA ACTIVIDADES
+
+//agregar actividad
+exports.addactivity = async (req, res, next) => {
+    const { name, description, date, status, idUser } = req.body;
+
+    const data = new DataActivity({
+        name: name || 0,
+        description: description || 0,
+        date: new Date(date),
+        status: status || false,
+        idUser: idUser
+    });
+
+    try {
+        await data.save();
+        res.json({ message: "Actividad añadida", data: data });
+    } catch (error) {
+        console.log(error);
+        res.send(error);
+        next();
+    }
+}
+
+//eliminar actividad
+exports.deleteactivity = async (req, res, next) => {
+    try {
+        const data = await DataActivity.findOneAndDelete(
+            { _id: req.params.id },
+            req.body,
+            {
+                new: true,
+                runValidators: true,
+                context: 'query'
+            }
+        );
+        if (!data) {
+            return res.status(400).json({ message: "Actividad no encontrada" })
+        }
+        res.json({ message: "Actividad Eliminada", data: data });
+
+    } catch (error) {
+        console.log(error);
+        res.status(400).json({ message: "Error" });
+        next(error);
+    }
+
+};
+
+//actualizar actividad
+exports.updateactivity = async (req, res, next) => {
+    try {
+        const data = await DataActivity.findOneAndUpdate(
+            { _id: req.params.id },
+            req.body,
+            {
+                new: true,
+                runValidators: true,
+                context: 'query'
+            }
+        );
+        if (!data) {
+            return res.status(400).json({ message: "Actividad no encontrada" })
+        }
+        res.json({ message: "Actividad actualizada", data: data });
+
+    } catch (error) {
+        console.log(error);
+        res.status(400).json({ message: "Error" });
+        next(error);
+    }
+
+};
+
+//buscar todas las actividades
+exports.listsactivity = async (req, res) => {
+    try {
+        //Get activities filtering by user id
+        const data = await DataActivity.find({idUser: req.params.idUser});
+        res.json(data);
+    } catch (error) {
+        console.log(error);
+        res.status(200).send(error);
+        next();
+    }
+};

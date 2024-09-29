@@ -1,14 +1,14 @@
-version: '3'
+version: '3' #version del docker
 services:
   app:
     build: .
     ports:
-      - "3000:3001"
-    environment:
+      - "3000:3001" #rango de puertos donde va a estar expuesto el contenedor
+    environment: #variables de entorno importantes para el funcionamiento de la API
       - MONGO_URI=${Mongo_uri}
       - SECRET_KEY=${SECRET_KEY}
       - Email_User=${Email_User}
       - Email_Pass=${Email_Pass}
     volumes:
       - .:/app
-    command: npm start
+    command: npm start #al crearse la imagen del contenedor el se inicializa con npm start

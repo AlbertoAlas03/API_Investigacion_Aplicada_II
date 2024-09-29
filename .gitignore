@@ -14,7 +14,6 @@ Thumbs.db
 /node_modules/
 
 # Configuraciones locales
-.env
 config/local.yml
 
 # Ignorar todos los archivos .log

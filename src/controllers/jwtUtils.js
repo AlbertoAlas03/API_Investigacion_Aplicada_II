@@ -1,4 +1,4 @@
-const jwt = require('jsonwebtoken');
+const jwt = require('jsonwebtoken'); //archivo para validacion de usuarios mediante JWT
 
 const generateToken = (payload) => {
     const secretKey = process.env.SECRET_KEY;

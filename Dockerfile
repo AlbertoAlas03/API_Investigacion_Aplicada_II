@@ -16,6 +16,6 @@ COPY . .
 #establecemos el puerto
 EXPOSE 3001
 
-# Define el comando para ejecutar tu aplicación
+# Definimos el comando para ejecutar tu aplicación
 CMD ["node", "src/index.js"]
 

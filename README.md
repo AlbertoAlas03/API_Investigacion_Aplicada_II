@@ -50,6 +50,7 @@ Para la construcción del contenedor Docker tenemos dos alternativas, la primera
 ![image](https://github.com/user-attachments/assets/a1e16ba0-a92d-49c9-a25f-a277304630bf)
 
 6- Una vez hecho estos nos aparecera en el apartado de "CONTAINERS" el contenedor que hemos creado y vemos que su status es run junto con el puerto en el que esta expuesto, significa que ya podemos hacer uso de el, el proceso de construcción ah sido un éxito.
+
 ![image](https://github.com/user-attachments/assets/61659f95-c5bd-41f6-b5f4-2b5def0245bd)
 
 ▶️ Pasos para construir el contenedor mediante comandos Docker:

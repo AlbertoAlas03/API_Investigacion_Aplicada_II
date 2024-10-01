@@ -12,3 +12,4 @@ services:
     volumes:
       - .:/app
     command: npm start #al crearse la imagen del contenedor el se inicializa con npm start
+    #command: npm run dev #al crearse la imagen del contenedor el se inicializa con npm run dev

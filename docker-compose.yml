@@ -3,7 +3,8 @@ services:
   app:
     build: .
     ports:
-      - "3000:3001" #rango de puertos donde va a estar expuesto el contenedor
+    #rango de puertos donde va a estar expuesto el contenedor
+      - "3000:3001" 
     environment: #variables de entorno importantes para el funcionamiento de la API
       - MONGO_URI=${Mongo_uri}
       - SECRET_KEY=${SECRET_KEY}
